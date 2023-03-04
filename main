@@ -1,0 +1,92 @@
+#include "mbed.h"
+#include "stm32l4xx_hal.h"
+
+#define BUFFER_SIZE 128
+
+DigitalOut RedLED(PA_7);
+DigitalOut GreenLED(PB_6);
+DigitalOut BlueLED(PC_7);
+AnalogIn HeartBeatSensor(PA_1);
+DigitalOut Buzzer(PB_9);
+
+
+Serial serial(USBTX, USBRX);
+Serial bluetooth(PA_9, PA_10);
+
+
+void onSerialRx(void)
+{
+    while(serial.readable())
+    {
+        buffer[bufferIndex++] = serial.getc();
+
+        if(bufferIndex >= BUFFER_SIZE)
+        {
+            bufferIndex = 0;
+        }
+    }
+}
+
+void onSerialError(void)
+{
+    serial.clear();
+    bufferIndex = 0;
+    isConnected = 0;
+}
+
+void onBluetoothRx(void)
+{
+    while(bluetooth.readable())
+    {
+        serial.putc(bluetooth.getc());
+    }
+}
+
+void onBluetoothError(void)
+{
+    bluetooth.clear();
+}
+
+void Siren(void)
+{
+    int i;
+     for (i=0; i<32; i=i+2) {
+        Buzzer.period(1.0/969.0);
+        Buzzer = float(i)/50.0;
+        wait(.5);
+        Buzzer.period(1.0/800.0);
+        wait(.5);
+    }
+}
+
+int main()
+{
+    serial.baud(9600);
+    bluetooth.baud(9600);
+
+    serial.attach(&onSerialRx);
+    serial.attach(&onSerialError, Serial::RxOverrunError | Serial::RxParityError | Serial::RxFrameError | Serial::RxNoiseError);
+
+    bluetooth.attach(&onBluetoothRx);
+    bluetooth.attach(&onBluetoothError, Serial::RxOverrunError | Serial::RxParityError | Serial::RxFrameError | Serial::RxNoiseError);
+
+    while(1)
+    {
+        if(!bluetooth.readable() && isConnected)
+        {
+            //disconnection
+            isConnected = 0;
+            bufferIndex = 0;
+            RedLED = 1;
+            Siren();
+
+        }
+        else if(bluetooth.readable() && !isConnected)
+        {
+            //connection
+            isConnected = 1;
+            GreenLED = 1;
+            
+        }
+    }
+}
