@@ -1,5 +1,9 @@
 #include "mbed.h"
 #include "stm32l476xx.h"
+#include "BufferedSerial.h"
+
+
+
 
 #define BUFFER_SIZE 128
 
@@ -9,36 +13,32 @@ DigitalOut BlueLED(PC_7);
 AnalogIn HeartBeatSensor(PA_1);
 PwmOut Buzzer(PB_9);
 
-Serial serial(USBTX, USBRX); 
-Serial bluetooth(PA_9, PA_10); 
-
+BufferedSerial serial(USBTX, USBRX);
+BufferedSerial bluetooth(PA_9, PA_10);
 
 volatile uint8_t buffer[BUFFER_SIZE];
 volatile uint8_t bufferIndex = 0;
 volatile uint8_t isConnected = 0;
 
-
-
 void SendData(char data);
 char ReceiveData(void);
 void SendString(char* str);
 
+EventQueue queue;
+
 void SendData(char data)
 {
-    
-    while (!(USART1->ISR & USART_ISR_TXE));
+    while (!(USART1->ISR & USART_ISR_TXE))
+        ;
 
-    
     USART1->TDR = data;
 }
 
-
 char ReceiveData(void)
 {
-    
-    while (!(USART1->ISR & USART_ISR_RXNE));
+    while (!(USART1->ISR & USART_ISR_RXNE))
+        ;
 
-    
     char data = USART1->RDR;
 
     return data;
@@ -46,7 +46,6 @@ char ReceiveData(void)
 
 void SendString(char* str)
 {
-
     while (*str)
     {
         SendData(*str++);
@@ -55,86 +54,109 @@ void SendString(char* str)
 
 void onSerialRx(void)
 {
-    while(serial.readable())
+    while (serial.readable())
     {
-        buffer[bufferIndex++] = serial.getc();
+        serial.read((void*)&buffer[bufferIndex], 1);
 
-        if(bufferIndex >= BUFFER_SIZE)
+
+        if (++bufferIndex >= BUFFER_SIZE)
         {
             bufferIndex = 0;
         }
     }
 }
 
+
+
 void onSerialError(void)
 {
-    serial.clear();
+    serial.read((void*)buffer, BUFFER_SIZE);
     bufferIndex = 0;
     isConnected = 0;
 }
 
 void onBluetoothRx(void)
 {
-    while(bluetooth.readable())
+    while (bluetooth.readable())
     {
-        serial.putc(bluetooth.getc());
+          char c;
+        bluetooth.read(&c, 1);
+        serial.write(&c, 1);
     }
 }
 
 void onBluetoothError(void)
 {
-    bluetooth.clear();
+    while (bluetooth.readable())
+    {
+         char data;
+        bluetooth.read(&data, 1);
+        serial.write(&data, 1);
+    }
+}
+
+void serialRxCallback(void)
+{
+   while (serial.readable()) {
+        serial.read((void*)&buffer[bufferIndex], 1);
+        bufferIndex++;
+        if (bufferIndex >= BUFFER_SIZE) {
+            bufferIndex = 0;
+        }
+    }
+}
+
+void bluetoothRxCallback(void)
+{
+    while (bluetooth.readable()) {
+        bluetooth.read((void*)&buffer[bufferIndex], 1);
+        bufferIndex++;
+        if (bufferIndex >= BUFFER_SIZE) {
+            bufferIndex = 0;
+        }
+    }
 }
 
 void Siren(void)
 {
     int i;
-     for (i=0; i<32; i=i+2) {
-        Buzzer.period(1.0/969.0);
-        Buzzer = float(i)/50.0;
-        wait(0.5);
-        Buzzer.period(1.0/800.0);
-        wait(0.5);
+    for (i = 0; i < 32; i = i + 2)
+    {
+        Buzzer.period(1.0 / 969.0);
+        Buzzer = float(i) / 50.0;
+        ThisThread::sleep_for(500ms);
+        Buzzer.period(1.0 / 800.0);
+        ThisThread::sleep_for(500ms);
     }
 }
 
 int main()
 {
-    serial.baud(9600);
-    bluetooth.baud(9600);
+    serial.set_baud(9600);
+    bluetooth.set_baud(9600);
 
-    serial.attach(&onSerialRx);
-    serial.attach(&onSerialError, Serial::RxOverrunError | Serial::RxParityError | Serial::RxFrameError | Serial::RxNoiseError);
+     serial.sigio(queue.event(serialRxCallback));
+     bluetooth.sigio(queue.event(bluetoothRxCallback));
 
-    bluetooth.attach(&onBluetoothRx);
-    bluetooth.attach(&onBluetoothError, Serial::RxOverrunError | Serial::RxParityError | Serial::RxFrameError | Serial::RxNoiseError);
 
-    while(1)
+    while (1)
     {
+        char data = ReceiveData();
 
-         char data = ReceiveData();
-
-
-        if(!bluetooth.readable() && isConnected)
+        if (!bluetooth.readable() && isConnected)
         {
             //disconnection
             isConnected = 0;
             bufferIndex = 0;
             RedLED = 1;
             Siren();
-
-
-            
         }
-        else if(bluetooth.readable() && !isConnected)
+        else if (bluetooth.readable() && !isConnected)
         {
             //connection
             isConnected = 1;
             GreenLED = 1;
-            
         }
     }
-
-    
-        
 }
+
