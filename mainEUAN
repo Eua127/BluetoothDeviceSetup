@@ -1,0 +1,68 @@
+/* mbed Microcontroller Library
+ * Copyright (c) 2019 ARM Limited
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include "mbed.h"
+DigitalOut sigled(D15);
+PwmOut buzzer(A0);
+DigitalOut dcmotor(D3);
+DigitalIn button(PC_13);
+//RGB LED Class System
+//===========================================================================================
+class RGBLED
+{
+public:
+    RGBLED(PinName redLpin, PinName greenLpin, PinName blueLpin);
+    void write(float red,float green, float blue);
+private:
+    PwmOut _redLpin;
+    PwmOut _greenLpin;
+    PwmOut _blueLpin;
+};
+
+RGBLED::RGBLED (PinName redLpin, PinName greenLpin, PinName blueLpin)
+    : _redLpin(redLpin), _greenLpin(greenLpin), _blueLpin(blueLpin)
+{
+    //2000Hz 
+    _redLpin.period(0.0005);
+}
+
+void RGBLED::write(float red,float green, float blue)
+{
+    _redLpin = red;
+    _greenLpin = green;
+    _blueLpin = blue;
+}
+
+//Setup RGB led using PWM pins and class
+RGBLED myRGBLED(D11,D10,D9); //RGB PWM pins
+//===============================================================================================
+
+int main(){
+    
+   while(1) { // Loop indefinitely
+   
+   //Buzzer Sequence
+
+/*      buzzer.period(1/440); // Set the frequency
+        buzzer.write(0.5); // Set the duty cycle of 
+        sigled = 1;
+        wait_us (500000); // Wait for 0.5 seconds
+        buzzer.write(0); // Set the duty cycle of the buzzer to 0%
+        sigled = 0;
+        wait_us (500000); // Wait for 0.5 seconds
+        */
+
+        //DC Motor
+        //RGB LED
+if (button == 0){
+    myRGBLED.write(0.0,0.0,1.0);
+    dcmotor = 1;
+}
+else if(button == 1){
+    myRGBLED.write(0.0,1.0,0.0);
+    dcmotor = 0;
+    }
+   }
+}
